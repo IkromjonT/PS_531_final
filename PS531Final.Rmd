@@ -1,0 +1,169 @@
+---
+title: "PS531"
+author: "Ikromjon Tuhtasunov"
+date: "5/12/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE, cache=FALSE}
+source("rmd_setup.R")
+install.packages(c(
+  "DeclareDesign",
+  "fabricatr",
+  "randomizr",
+  "estimatr",
+  "DesignLibrary"
+))
+library(RItools)
+library(tidyverse)
+library(haven)
+library(DeclareDesign)
+library(ggplot2)        # plotting & data
+library(dplyr)          # data manipulation
+library(tidyr)          # data re-shaping
+library(magrittr)       # pipe operator
+library(gridExtra) 
+library(ivreg)
+library(PairedData)
+install.packages("DeclareDesing")
+library(DeclareDesign)
+library(randomizr)
+library(fabricatr)
+library(estimatr)
+library(stargazer)
+```
+
+```{r}
+```
+
+
+```{r}
+data4 <- read.csv("dem_survey1.csv")
+names(data4)[1:20] <- c("age", "education", "gender", "lottery", "migrant", "dictator", "expert", "military", "dem_system", "islam_system", "communist_system", "direct_dem",  "dem_char1", "dem_char2", "dem_char3",  "uzb_dem_5", "uzb_dem_now", "dem_importance", "uzb_dem", "islam_gov")   
+
+# Chi-square tests
+data4$age <- as.numeric(data4$age)
+age_treat <- table(data4$migrant, data4$age)
+chisq.test(age_treat)     # p-value is 0.43
+
+gender_treat <- table(data4$migrant, data4$gender)
+chisq.test(gender_treat)  # p-value is 0.07
+
+edu_treat <- table(data4$migrant, data4$education)
+chisq.test(edu_treat)  # p-value is 0.08
+
+age_success <- table(data4$lottery, data4$age)
+chisq.test(age_success)  # p-value 040
+
+gender_success <- table(data4$lottery, data4$gender)
+chisq.test(gender_success)    # p-value 0.11
+
+edu_success <- table(data4$lottery, data4$edu)
+chisq.test(edu_success)   # 0.03
+
+# given my data is fake and treatment is not random, there are some associations
+
+# Declare desing
+
+iv1 <- ivreg(dem_system ~ migrant | lottery , data = data4)
+summary(iv1)
+
+m1 <- lm(dem_system ~ migrant, data = data4) 
+summary(m1)
+
+simple_random_assignment_step <- 
+  declare_assignment(Z = simple_ra(N = N, prob = 0.6), 
+                     legacy = FALSE)
+simple_random_assignment_step(data4)
+
+study_diagnosands <- declare_diagnosands(
+  bias = mean(estimate - estimand),
+  rmse = sqrt(mean((estimate - estimand)^2)),
+  power = mean(p.value <= 0.05)
+)
+
+m_population <- declare_population(data = data4)
+m_outcomes <- declare_potential_outcomes(Y_Z_0 = as.numeric(dem_system), Y_Z_1 = Y_Z_0 + 0.25)
+m_inquiry <- declare_estimand(PATE = mean(Y_Z_1 - Y_Z_0))
+m_assignment <- declare_assignment(m = 121, label = "Z")
+m_reveal <- declare_reveal(Y,Z)
+m_est1 <- declare_estimator(Y ~ Z, model = difference_in_means, label = "PATE")
+m_est2 <- declare_estimator(Y ~ Z, model = lm, label = "lm")
+
+test_design1 <- (m_population + m_outcomes + m_assignment + m_inquiry + m_reveal + m_est1 +m_est2)
+sim_data1 <- draw_data(test_design1)
+m_est1(sim_data1)
+m_est2(sim_data1)
+set.seed(34444)
+simulate_design(test_design1)
+des_diagnose1 <- diagnose_design(test_design1, bootstrap_sims = 0, sims = 1000)
+des_diagnose1
+
+with(sim_data1,sd(Y[Z==1], na.rm = TRUE))
+with(sim_data1,sd(Y[Z==0], na.rm = TRUE))
+
+with(data4,sd(dem_system[migrant==1], na.rm = TRUE))
+with(data4,sd(dem_system[migrant==0], na.rm = TRUE))
+
+study_diagnosands <- declare_diagnosands(
+  bias = mean(estimate - estimand),
+  rmse = sqrt(mean((estimate - estimand)^2)),
+  power = mean(p.value <= 0.05)
+)
+
+t.test(dem_system ~ migrant, data = data4, paired = FALSE,
+        alternative = "less")
+t.test(dictator ~ migrant, data = data4, paired = FALSE,
+        alternative = "less")
+k2 <- t.test(expert ~ migrant, data = data4, paired = FALSE,
+        alternative = "less")
+k1 <- t.test(military ~ migrant, data = data4, paired = FALSE,
+        alternative = "less")
+
+res
+```
+
+
+```{r}
+head(dem_survey)
+
+model1 <- lm(dem_system  ~ migrant, data=dem_survey)
+summary(model1)
+t.test(dem_survey$dem_system , dem_survey$dictator)
+group_by(data11, migrant) %>%
+  summarise(
+    count = n(),
+     mean = mean(dem_system, na.rm = TRUE),
+    sd = sd(dem_system, na.rm = TRUE)
+  )
+res <- t.test(dem_system ~ migrant, data = data11, paired = TRUE)
+res
+```
+
+
+## R Markdown
+
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
